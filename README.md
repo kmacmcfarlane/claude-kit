@@ -1,4 +1,4 @@
-# kmac-claude-kit
+# claude-kit
 
 A personal toolkit for building software with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). This repo describes how the pieces fit together.
 
@@ -8,12 +8,12 @@ A personal toolkit for building software with [Claude Code](https://docs.anthrop
 |---|---|
 | [claude-sandbox](https://github.com/kmacmcfarlane/claude-sandbox) | Sandboxed Docker container for running Claude Code sessions safely. Mounts the project directory and host Docker socket, provides Go, Node.js, Python, and build tools, and supports interactive and ralph (autonomous loop) modes. |
 | [claude-templates](https://github.com/kmacmcfarlane/claude-templates) | Project templates for quick-starting new repos. Each template includes a full agent workflow (orchestrator, subagent definitions, backlog CLI, worktree tooling, practices docs), Docker Compose, and MCP servers for Discord and gopls. |
-| [claude-skills](https://github.com/kmacmcfarlane/claude-skills) | Reusable Claude Code skills (slash commands) for backlog management, project scaffolding, and upstream sync. |
+| [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins) | Reusable Claude Code skills (slash commands) for backlog management, project scaffolding, and upstream sync. |
 
 ## How they relate
 
 ```
-kmac-claude-kit (you are here)
+claude-kit (you are here)
 │
 ├── claude-sandbox        Start a sandboxed Claude Code session
 │     │
@@ -21,7 +21,7 @@ kmac-claude-kit (you are here)
 │           │
 │           ├── .claude/
 │           │     ├── agents/          Subagent definitions (5 agents)
-│           │     ├── skills/          ← copy from claude-skills
+│           │     ├── skills/          ← copy from claude-plugins
 │           │     └── settings.json    Permission policy
 │           │
 │           └── (project scaffolded from claude-templates)
@@ -50,7 +50,7 @@ kmac-claude-kit (you are here)
 ├── claude-templates      Template source (copy into new repos)
 │     └── local-web-app/  Go + Vue 3 + Docker Compose
 │
-└── claude-skills         Skill source (copy or symlink into projects)
+└── claude-plugins         Skill source (copy or symlink into projects)
       └── skills/
             ├── backlog-yaml/      Backlog CLI reference skill
             ├── backlog-entry/     Interactive ticket creation
@@ -125,7 +125,7 @@ Auto-resolves trivial merge conflicts (CHANGELOG, backlog.yaml) when concurrent 
 
 1. Copy the `local-web-app` template from [claude-templates](https://github.com/kmacmcfarlane/claude-templates) into a new repo.
 2. Replace placeholder values (project name in `backlog.yaml`, compose project names).
-3. Copy skills from [claude-skills](https://github.com/kmacmcfarlane/claude-skills) into `.claude/skills/`.
+3. Copy skills from [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins) into `.claude/skills/`.
 4. Write your PRD in `agent/PRD.md` and add stories to `agent/backlog.yaml` (via `backlog.py add`).
 5. Run `make claude` to start a sandboxed session, or `make ralph` for autonomous loops.
 
@@ -146,7 +146,7 @@ Use the `/backlog-grooming` skill for conversational UAT review sessions:
 
 ### Creating new skills
 
-Use the `/create-skill` skill from [claude-skills](https://github.com/kmacmcfarlane/claude-skills):
+Use the `/create-skill` skill from [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins):
 
 ```
 /create-skill A skill that runs the test suite and summarizes failures
