@@ -1,183 +1,97 @@
 # claude-kit
 
-A personal toolkit for building software with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). This repo describes how the pieces fit together.
+A personal toolkit for building software with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). This repo is the map: it describes how the pieces fit together and what each one owns. Setup and usage instructions live in the component repos linked below.
+
+> This repo was previously named `kmac-claude-kit`. GitHub redirects the old URL, but `claude-kit` is the current name.
 
 ## Components
 
-| Repo | Purpose |
+| Repo | Owns |
 |---|---|
-| [claude-sandbox](https://github.com/kmacmcfarlane/claude-sandbox) | Sandboxed Docker container for running Claude Code sessions safely. Mounts the project directory and host Docker socket, provides Go, Node.js, Python, and build tools, and supports interactive and ralph (autonomous loop) modes. |
-| [claude-templates](https://github.com/kmacmcfarlane/claude-templates) | Project templates for quick-starting new repos. Each template includes a full agent workflow (orchestrator, subagent definitions, backlog CLI, worktree tooling, practices docs), Docker Compose, and MCP servers for Discord and gopls. |
-| [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins) | Plugin marketplace and **source of truth** for reusable Claude Code skills — backlog management, project scaffolding, upstream sync, framework-specific helpers. Skills live under `plugins/claude-kit/skills/` and are installed into projects via the `/plugins` slash command. |
+| [claude-sandbox](https://github.com/kmacmcfarlane/claude-sandbox) | Running Claude Code in a Docker container with filesystem isolation and opt-in host access (Docker socket, AWS, git, SSH). Provides interactive and ralph (autonomous loop) modes, and the `init` / `init-ralph` commands that bootstrap a project. **Start here** — installation and CLI reference are in its README. |
+| [claude-templates](https://github.com/kmacmcfarlane/claude-templates) | Project scaffolding for new repos — application skeleton, Docker Compose, subagent definitions, and the project-specific workflow and practice docs. |
+| [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins) | The plugin marketplace and the **source of truth for skills** — backlog management, project scaffolding, upstream sync, and framework-specific helpers. Its README has the marketplace and install commands. |
 
 > **Note:** A legacy `claude-skills` repo exists but is **deprecated** in favor of the claude-plugins marketplace. Do not sync to it.
 
-## How they relate
+## How they fit together
 
 ```
-claude-kit (you are here)
-│
-├── claude-sandbox        Start a sandboxed Claude Code session
-│     │
-│     └── mounts your project repo
-│           │
-│           ├── .claude/
-│           │     ├── agents/          Subagent definitions
-│           │     ├── skills/          ← installed from claude-plugins via /plugins
-│           │     └── settings.json    Permission policy
-│           │
-│           └── (project scaffolded from claude-templates)
-│                 ├── CLAUDE.md         Always-loaded agent context
-│                 ├── .mcp.json         MCP servers (Discord, gopls)
-│                 ├── agent/
-│                 │     ├── AGENT_FLOW.md        Orchestrator contract
-│                 │     ├── PROMPT.md            Orchestrator prompt
-│                 │     ├── PROMPT_AUTO.md       Autonomous mode policy
-│                 │     ├── PROMPT_INTERACTIVE.md Interactive mode policy
-│                 │     ├── TEST_PRACTICES.md    Testing standards
-│                 │     ├── DEVELOPMENT_PRACTICES.md Engineering standards
-│                 │     ├── LSP_TOOLS.md         gopls/LSP tool reference
-│                 │     ├── BUG_REPORTING.md     Bug report quality guide
-│                 │     ├── PRD.md               Product requirements (per-project)
-│                 │     ├── backlog.yaml          Story tracker
-│                 │     ├── backlog_done.yaml     Completed stories archive
-│                 │     └── ideas/               Agent-suggested improvements
-│                 ├── scripts/
-│                 │     ├── backlog/    backlog.py CLI (CRUD, work selection)
-│                 │     ├── worktree/   worktree.py + merge_helper.py
-│                 │     └── compose-project-name.sh
-│                 ├── docs/            Architecture, database, API docs
-│                 └── ...
-│
-├── claude-templates      Template source (copy into new repos)
-│     └── local-web-app/  Go + Vue 3 + Docker Compose
-│
-└── claude-plugins        Plugin marketplace (source of truth for skills)
-      └── plugins/
-            └── claude-kit/skills/
-                  ├── backlog-yaml/      Backlog CLI reference skill
-                  ├── backlog-entry/     Interactive ticket creation
-                  ├── backlog-grooming/  UAT review and grooming sessions
-                  ├── update-kit/        Sync changes back to upstream repos
-                  ├── create-skill/      Bootstrap new skills
-                  ├── goa/               Goa v3 API framework
-                  ├── playwright/        E2E test authoring
-                  ├── musubi-tuner/      LoRA training with kohya
-                  └── sandbox/           claude-sandbox config helper
+claude-sandbox          Runs Claude Code in a container, mounts your project
+      │
+      ├── init / init-ralph  ──►  seeds .claude-sandbox/ into the project
+      │
+      ▼
+your project repo
+      │
+      ├── .claude-sandbox/     Sandbox config + agent workflow + tooling
+      │     ├── config.yaml          Host access, model, image settings
+      │     ├── env                  Secrets (Discord webhook, etc.)
+      │     ├── agent/               Workflow docs, prompts, PRD, backlog
+      │     └── scripts/             backlog + worktree tooling
+      │
+      ├── .claude/             Subagent definitions, skills, permission policy
+      │     └── skills/              ◄── installed from claude-plugins
+      │
+      └── (application code)   ◄── scaffolded from claude-templates
 ```
 
-## Agent Pipeline
+Three rules make this composable:
 
-Stories progress through a multi-agent pipeline orchestrated by `PROMPT.md`:
+- **`init-ralph` is idempotent.** It never overwrites an existing `config.yaml`, `env`, agent doc, or script — re-running fills only what's missing and reports what it skipped.
+- **Templates win over defaults.** A template lays down its own project-specific workflow and practice docs first; a later `init-ralph` keeps those and adds only the generic pieces the template didn't provide.
+- **Skills flow one way.** claude-plugins is upstream of every project. Skills are installed from the marketplace, never hand-copied between projects, and improvements go back up via `/update-kit`.
+
+## Agent pipeline
+
+Stories progress through a multi-agent pipeline driven by the orchestrator prompt in `.claude-sandbox/agent/`:
 
 ```
 todo → in_progress → review → testing → uat → done
          │              │         │        │
-   fullstack-dev   code-reviewer  QA    user reviews
+    implement      code review    QA    user reviews
 ```
 
-| Agent | Role | Invoked when |
-|---|---|---|
-| **Fullstack Developer** | Implements features/bugs, writes unit + E2E tests | `todo` or `in_progress` |
-| **Code Reviewer** | Reviews code quality, security, architecture | `review` |
-| **QA Expert** | Runs E2E suite, verifies acceptance criteria, runtime error sweep | `testing` |
-| **Debugger** | Diagnoses hard bugs, test failures | On demand |
-| **Security Auditor** | Security assessments | On demand |
+Specialized subagents (implementation, code review, QA, architecture review, debugging, security audit) handle each stage. The current roster lives in the template's `.claude/agents/` and in the claude-kit plugin.
 
-The orchestrator owns all status transitions, CHANGELOG updates, commits, and merges. Subagents report structured verdicts only.
+Subagents *decide* transitions; the orchestrator *writes* them. A reviewer's verdict determines whether a story advances or bounces back, but no subagent touches the backlog, CHANGELOG, commits, or merges — those are exclusively the orchestrator's. That split is what keeps the state machine consistent when agents run in parallel.
 
-After QA approval, stories enter `uat` (user acceptance testing) with code merged to main. The user reviews and either approves (`done`) or provides feedback (`uat_feedback`) for a rework cycle.
+After QA approval, stories enter `uat` with code already merged to main. The user reviews and either approves (`done`) or provides feedback (`uat_feedback`) for a rework cycle.
 
-### Model tiering
-
-The orchestrator selects models per agent based on story complexity:
-- **low** complexity → `sonnet` (fast, cost-effective)
-- **medium/high** complexity → `opus` (deeper analysis)
+**Model tiering:** the orchestrator picks a model per agent from story complexity — lighter models for low-complexity work, stronger ones where deeper analysis pays off.
 
 ## Tooling
 
-### Backlog CLI (`scripts/backlog/backlog.py`)
+Seeded into `.claude-sandbox/scripts/` by `claude-sandbox init-ralph`:
 
-All backlog operations go through this CLI — never edit YAML directly. It provides round-trip YAML preservation, schema validation, atomic writes, and file locking for concurrent access.
-
-```bash
-backlog.py next-work --format json              # Deterministic work selection
-backlog.py query --status todo --fields id,title # Filter stories
-backlog.py set S-052 status review              # Update status
-backlog.py next-id B                            # Get next bug ID
-cat ticket.yaml | backlog.py add                # Add new stories
-backlog.py validate --strict                    # Schema validation
-```
-
-### Worktree manager (`scripts/worktree/worktree.py`)
-
-Enables parallel agent execution via per-story git worktrees with Docker compose isolation:
-
-```bash
-worktree.py create S-042                  # Create isolated worktree
-worktree.py detect-stale                  # Find orphaned worktrees
-STORY_ID=S-042 make test-backend          # Story-scoped compose stack
-```
-
-### Merge helper (`scripts/worktree/merge_helper.py`)
-
-Auto-resolves trivial merge conflicts (CHANGELOG, backlog.yaml) when concurrent stories merge to main. Non-trivial conflicts go through the normal rework flow.
+- **Backlog CLI** — all backlog operations go through it; the YAML is never edited directly. Round-trip YAML preservation, schema validation, atomic writes, and file locking for concurrent access. Also drives deterministic work selection, so an autonomous loop always picks the same next story.
+- **Worktree manager** — per-story git worktrees with isolated Docker Compose stacks, so multiple agents can work in parallel without colliding.
+- **Merge helper** — auto-resolves the mechanical merge conflicts (CHANGELOG, backlog) that concurrent stories inevitably produce. Anything non-trivial goes through the normal rework flow.
 
 ## Workflow
 
 ### Starting a new project
 
-1. Copy the `local-web-app` template from [claude-templates](https://github.com/kmacmcfarlane/claude-templates) into a new repo.
-2. Replace placeholder values (project name in `backlog.yaml`, compose project names).
-3. Install skills from the [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins) marketplace via the `/plugins` slash command (the `claude-kit` plugin contains backlog, sandbox, update-kit, etc.).
-4. Write your PRD in `agent/PRD.md` and add stories to `agent/backlog.yaml` (via `backlog.py add`).
-5. Run `make claude` to start a sandboxed session, or `make ralph` for autonomous loops.
+Use the `/new-project-from-template` skill, or do it by hand: copy a template from claude-templates, `git init`, then run `claude-sandbox init-ralph` to seed the sandbox config and agent scaffolding. Fill in the PRD, groom the backlog, and start a session.
 
 ### Day-to-day development
 
-- **Interactive**: `make claude` launches a [claude-sandbox](https://github.com/kmacmcfarlane/claude-sandbox) container with Claude Code.
-- **Autonomous**: `make ralph` or `make ralph-auto` runs fresh-context loops that pick up stories from the backlog automatically. Each cycle processes exactly one story through the full pipeline.
-- **Parallel**: Multiple agents can work concurrently using worktrees — each gets an isolated git checkout and Docker compose stack.
-- **Notifications**: Discord MCP server pings you when the agent starts a story, needs input, finishes, or gets blocked.
+- **Interactive** — a sandboxed Claude Code session against the project.
+- **Autonomous** — ralph mode runs fresh-context loops that pull stories off the backlog on their own. Each cycle takes exactly one story through the full pipeline.
+- **Parallel** — several agents at once via worktrees, each with its own checkout and Compose stack.
+- **Notifications** — a Discord MCP server pings you when the agent starts a story, needs input, finishes, or gets blocked.
 
 ### Backlog grooming
 
-Use the `/backlog-grooming` skill for conversational UAT review sessions:
-- Triage `uat` stories (approve, provide feedback, or skip)
-- File new bugs and feature requests
-- Adjust priorities and dependencies
-- All mutations are batched and confirmed before execution
-
-### Creating new skills
-
-Use the `/create-skill` skill (installed via [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins)):
-
-```
-/create-skill A skill that runs the test suite and summarizes failures
-```
+`/backlog-grooming` runs a conversational UAT review: triage stories awaiting acceptance, file bugs and feature requests, adjust priorities and dependencies. Mutations are batched and confirmed before anything is written.
 
 ### Syncing changes upstream
 
-When a project evolves its workflow files beyond the template, use `/update-kit` to sync improvements back:
+When a project's workflow files drift ahead of the template, `/update-kit` syncs the improvements back. It scans for differences, classifies each change as generic or project-specific, and syncs the generic ones with genericization verification.
 
-```
-/update-kit all
-```
+### Skills
 
-This dynamically scans for differences between the project and upstream repos, classifies changes as generic or project-specific, builds a task-based plan, and syncs with genericization verification.
-
-## Skills Reference
-
-| Skill | Description |
-|---|---|
-| `/backlog-yaml` | Backlog CLI reference — auto-activates when working with stories |
-| `/backlog-entry` | Interactive ticket creation with validation and batch support |
-| `/backlog-grooming` | UAT review, bug reporting, priority management sessions |
-| `/update-kit` | Sync workflow files and skills back to upstream repos |
-| `/create-skill` | Bootstrap new skills with best-practices template |
-| `/goa` | Goa v3 API framework design and code generation |
-| `/playwright` | Playwright E2E test authoring and configuration |
-| `/musubi-tuner` | LoRA training with kohya's musubi-tuner |
+The full skill catalog, along with marketplace and install instructions, lives in the [claude-plugins](https://github.com/kmacmcfarlane/claude-plugins) README. New skills are bootstrapped with `/create-skill` and belong in that repo.
 
 ## License
 
